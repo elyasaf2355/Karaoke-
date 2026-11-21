@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14122b">
+<title>שירה עם מוזיקה</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>🎶 שירה עם מוזיקה</h1>
+  <nav class="nav"><a href="index.html">טיונר חופשי</a><a href="song.html" class="cur">שיר</a></nav>
+
+  <section class="controls">
+    <label>שיר <select id="song"></select></label>
+    <label>אוקטבה
+      <select id="octave">
+        <option value="strict">קפדנית (אותה אוקטבה)</option>
+        <option value="loose">מקילה (כל אוקטבה)</option>
+      </select>
+    </label>
+  </section>
+  <label class="check"><input type="checkbox" id="guide"> השמעת המנגינה כהדרכה (מומלץ באוזניות)</label>
+
+  <canvas id="roll" aria-label="צלילי המנגינה והקול שלכם"></canvas>
+
+  <section class="display" id="display" data-state="idle">
+    <div class="message" id="message">לחצו על התחלה</div>
+    <div class="detail" id="detail"></div>
+    <div class="score" id="score"></div>
+  </section>
+
+  <button id="toggle" class="start">התחלה</button>
+  <p class="hint">הקול נשאר במכשיר. כדי שהמיקרופון לא יקלוט את המוזיקה, מומלץ מאוד להשתמש באוזניות.</p>
+</main>
+<script src="pitch.js"></script>
+<script src="songs.js"></script>
+<script src="song.js"></script>
+</body>
+</html>

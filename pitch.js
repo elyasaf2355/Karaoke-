@@ -102,6 +102,21 @@ function median(arr) {
   return s[Math.floor(s.length / 2)];
 }
 
+/**
+ * משווה צליל של זמר לצליל היעד במנגינה.
+ * strictOctave=true: שירה באוקטבה אחרת נחשבת טעות.
+ * @returns {{ok:boolean, octave:number, cents:number}}
+ *   octave: בכמה אוקטבות הזמר רחוק מהיעד (שלילי = נמוך מדי)
+ *   cents: הסטייה שנותרה אחרי הורדת האוקטבות (חיובי = גבוה מדי)
+ */
+function judge(voiceMidi, targetMidi, strictOctave, tolCents) {
+  const diff = (voiceMidi - targetMidi) * 100;
+  const octave = Math.round(diff / 1200);
+  const cents = diff - octave * 1200;
+  const ok = Math.abs(cents) <= tolCents && (!strictOctave || octave === 0);
+  return { ok, octave, cents };
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { detectPitch, freqToMidi, analyze, median, SCALES, NOTE_NAMES_HE };
+  module.exports = { detectPitch, freqToMidi, analyze, judge, median, SCALES, NOTE_NAMES_HE };
 }
