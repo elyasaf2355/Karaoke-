@@ -30,3 +30,7 @@ button.stop{background:#c0392b}
 .display[data-state=oct]{--c:#f1c40f}
 .score{margin-top:8px;color:var(--text);font-weight:600;min-height:1.4rem}
 .display .message{font-size:1.4rem}
+main{min-width:0;overflow-x:hidden}
+.controls label{min-width:0}
+select{width:100%;min-width:0}
+#roll{max-width:100%}

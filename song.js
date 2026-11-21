@@ -99,7 +99,7 @@
     const y = (m) => H - (m - lo + 1) * rh;
     const x = (t) => W * PLAYHEAD + ((t - play) / WINDOW) * W;
     for (let m = lo; m <= hi; m++) {
-      if (m % 12 === 0) { g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(0, y(m), W, 1); g.fillStyle = "#9a95c9"; g.font = "10px sans-serif"; g.fillText("דו" + (m / 12 - 1), 4, y(m) - 2); }
+      if (m % 12 === 0) { g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(0, y(m), W, 1); g.fillStyle = "#9a95c9"; g.font = "10px sans-serif"; g.direction = "ltr"; g.textAlign = "left"; g.fillText("דו" + (m / 12 - 1), 4, y(m) - 2); }
     }
     notes.forEach((n) => {
       const x1 = x(n.start), x2 = x(n.end);
@@ -122,7 +122,7 @@
     lo = Math.min(...ms) - 13; hi = Math.max(...ms) + 5; // מציגים גם אוקטבה מתחת לצלילי המנגינה
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false },
+        audio: { echoCancellation: !$("phones").checked, noiseSuppression: false, autoGainControl: false },
       });
     } catch (e) {
       setMsg("idle", "אין גישה למיקרופון", "אשרו שימוש במיקרופון בהגדרות הדפדפן (נדרש HTTPS)"); return;
@@ -157,7 +157,7 @@
     const t = stats.total || 1, pct = (k) => Math.round((100 * stats[k]) / t) + "%";
     setMsg(stats.ok / t >= 0.7 ? "ok" : "idle", "סיימתם! ציון: " + pct("ok"),
       "גבוה מדי: " + pct("high") + " · נמוך מדי: " + pct("low") + (strict ? " · אוקטבה שגויה: " + pct("oct") : "") + " · לא שרתם: " + pct("silent"));
-    $("score").textContent = strict && stats.oct / t > 0.3 ? "טיפ: שרתם באוקטבה אחרת מהמנגינה. נסו את מצב 'מקילה' אם זו הטווח הטבעי של הקול שלכם." : "";
+    $("score").textContent = strict && stats.oct / t > 0.3 ? "טיפ: שרתם באוקטבה אחרת מהמנגינה. נסו את מצב 'מקילה' אם זה הטווח הטבעי של הקול שלכם." : "";
   }
 
   $("toggle").addEventListener("click", () => {
