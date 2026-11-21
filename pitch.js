@@ -117,6 +117,31 @@ function judge(voiceMidi, targetMidi, strictOctave, tolCents) {
   return { ok, octave, cents };
 }
 
+// זיהוי סולם (Krumhansl-Schmuckler) מתוך וקטור chroma של 12 צלילים.
+const KS_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+const KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+
+function correlation(a, b) {
+  const n = a.length;
+  const ma = a.reduce((x, y) => x + y, 0) / n, mb = b.reduce((x, y) => x + y, 0) / n;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < n; i++) { num += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; }
+  return da && db ? num / Math.sqrt(da * db) : 0;
+}
+
+/** @returns {{root:number, scale:"major"|"minor", score:number}} */
+function estimateKey(chroma) {
+  let best = { root: 0, scale: "major", score: -2 };
+  for (let root = 0; root < 12; root++) {
+    for (const [scale, prof] of [["major", KS_MAJOR], ["minor", KS_MINOR]]) {
+      const rotated = chroma.map((_, pc) => prof[(pc - root + 12) % 12]);
+      const score = correlation(chroma, rotated);
+      if (score > best.score) best = { root, scale, score };
+    }
+  }
+  return best;
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { detectPitch, freqToMidi, analyze, judge, median, SCALES, NOTE_NAMES_HE };
+  module.exports = { detectPitch, freqToMidi, analyze, judge, estimateKey, median, SCALES, NOTE_NAMES_HE };
 }

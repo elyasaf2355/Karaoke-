@@ -34,3 +34,5 @@ main{min-width:0;overflow-x:hidden}
 .controls label{min-width:0}
 select{width:100%;min-width:0}
 #roll{max-width:100%}
+button.secondary{background:transparent;border:1px solid #38336e;color:var(--muted);font-size:1rem;padding:12px}
+button[hidden]{display:none}
