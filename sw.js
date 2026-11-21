@@ -1,6 +1,6 @@
 // רשת קודם (תמיד הגרסה העדכנית), ומטמון רק כשאין אינטרנט.
-const CACHE = "pitch-v6";
-const FILES = ["./", "index.html", "song.html", "external.html", "style.css", "pitch.js", "app.js", "song.js", "songs.js", "external.js", "manifest.webmanifest", "icons/icon.svg"];
+const CACHE = "pitch-v7";
+const FILES = ["./", "index.html", "song.html", "external.html", "style.css", "pitch.js", "app.js", "song.js", "songs.js", "external.js", "session.js", "manifest.webmanifest", "icons/icon.svg"];
 self.addEventListener("install", (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))); });
 self.addEventListener("activate", (e) => e.waitUntil(
   caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));

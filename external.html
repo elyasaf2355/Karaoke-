@@ -19,6 +19,8 @@
     <label>סוג <select id="scale"><option value="major">מז'ור</option><option value="minor">מינור</option></select></label>
   </section>
 
+  <label class="check"><input type="checkbox" id="auto" checked> זיהוי סולם אוטומטי (כולל שינוי סולם באמצע השיר)</label>
+
   <section class="display" id="display" data-state="idle">
     <div class="note" id="note">—</div>
     <div class="gauge" aria-hidden="true">
@@ -33,9 +35,10 @@
   <button id="toggle" class="start">התחלה</button>
   <button id="skip" class="secondary" hidden>דלגו על הכיול (בחרתי סולם ידנית)</button>
   <p class="hint">שלב 1: מפעילים מוזיקה ולא שרים כ־5 שניות, והאפליקציה לומדת את הרקע ומזהה את הסולם.<br>שלב 2: שרים. אפשר לתקן את הסולם ידנית בכל רגע.<br>האפליקציה לא מכירה את המנגינה, ולכן היא בודקת סולם ודיוק, לא אוקטבה.</p>
-  <p class="hint" id="ver">גרסה 6</p>
+  <p class="hint" id="ver">גרסה 7</p>
 </main>
 <script src="pitch.js"></script>
+<script src="session.js"></script>
 <script src="external.js"></script>
 </body>
 </html>

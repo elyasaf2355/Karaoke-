@@ -21,9 +21,9 @@ function detectPitch(buf, sampleRate, opts = {}) {
   const threshold = opts.threshold || 0.12;
   const minRms = opts.minRms || 0.01;
 
-  const half = Math.floor(buf.length / 2);
+  const half = Math.min(opts.window || Math.floor(buf.length / 2), Math.floor(buf.length / 2));
   const tauMin = Math.max(2, Math.floor(sampleRate / maxFreq));
-  const tauMax = Math.min(half - 1, Math.floor(sampleRate / minFreq));
+  const tauMax = Math.min(buf.length - half - 1, Math.floor(sampleRate / minFreq));
 
   let sumSq = 0;
   for (let i = 0; i < buf.length; i++) sumSq += buf[i] * buf[i];
@@ -54,6 +54,11 @@ function detectPitch(buf, sampleRate, opts = {}) {
       tau = t;
       break;
     }
+  }
+  if (tau === -1 && opts.fallback) { // YIN: אין חציית סף, לוקחים את המינימום הגלובלי אם הוא נמוך מספיק
+    let m = tauMin;
+    for (let t = tauMin; t <= tauMax; t++) if (cmnd[t] < cmnd[m]) m = t;
+    if (cmnd[m] < opts.fallback) tau = m;
   }
   if (tau === -1) return null;
 
@@ -113,7 +118,7 @@ function judge(voiceMidi, targetMidi, strictOctave, tolCents) {
   const diff = (voiceMidi - targetMidi) * 100;
   const octave = Math.round(diff / 1200);
   const cents = diff - octave * 1200;
-  const ok = Math.abs(cents) <= tolCents && (!strictOctave || octave === 0);
+  const ok = Math.abs(cents) <= tolCents + 1e-9 && (!strictOctave || octave === 0); // אפסילון: שגיאת עיגול בגבול
   return { ok, octave, cents };
 }
 
@@ -127,6 +132,12 @@ function correlation(a, b) {
   let num = 0, da = 0, db = 0;
   for (let i = 0; i < n; i++) { num += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; }
   return da && db ? num / Math.sqrt(da * db) : 0;
+}
+
+/** ציון ההתאמה (קורלציה) של chroma לסולם מסוים. */
+function scoreKey(chroma, root, scale) {
+  const prof = scale === "major" ? KS_MAJOR : KS_MINOR;
+  return correlation(chroma, chroma.map((_, pc) => prof[(pc - root + 12) % 12]));
 }
 
 /** @returns {{root:number, scale:"major"|"minor", score:number}} */
@@ -154,6 +165,110 @@ function micErrorText(e) {
   return "לא הצלחנו לפתוח את המיקרופון. (" + (name || String(e)) + ")";
 }
 
+/** מסכת סיביות של 12 הצלילים בסולם (מז'ור/מינור טבעי). מז'ור ומינור יחסי נותנים אותה מסכה. */
+function keyMask(root, scale) {
+  let m = 0;
+  for (const st of SCALES[scale].steps) m |= 1 << ((root + st) % 12);
+  return m;
+}
+
+/**
+ * chroma (12 צלילים) מתוך ספקטרום עוצמות (לא dB), לפי פסגות ספקטרליות בלבד.
+ * פסגות חלשות מ-minRel מהחזקה ביותר נזרקות, כדי שרעש רחב-סרט (תופים) לא יזייף את התוצאה.
+ */
+function chromaFromMagnitudes(mags, sampleRate, fftSize, opts = {}) {
+  const minHz = opts.minHz || 80, maxHz = opts.maxHz || 2000, minRel = opts.minRel || 0.05;
+  const f0 = opts.f0 || 0, notch = opts.notchCents || 60; // f0: מוחקים את ההרמוניות של הזמר
+  const hz = sampleRate / fftSize;
+  const lo = Math.max(2, Math.ceil(minHz / hz)), hi = Math.min(mags.length - 2, Math.floor(maxHz / hz));
+  let max = 0;
+  for (let k = lo; k <= hi; k++) if (mags[k] > max) max = mags[k];
+  const chroma = new Float64Array(12);
+  if (max <= 0) return chroma;
+  for (let k = lo; k <= hi; k++) {
+    const m = mags[k];
+    if (m < max * minRel || m <= mags[k - 1] || m < mags[k + 1]) continue;
+    const a = Math.log(mags[k - 1] + 1e-12), b = Math.log(m + 1e-12), c = Math.log(mags[k + 1] + 1e-12);
+    const d = a - 2 * b + c;
+    const off = d !== 0 ? (0.5 * (a - c)) / d : 0;
+    const freq = (k + Math.max(-0.5, Math.min(0.5, off))) * hz;
+    if (f0) {
+      const h = Math.round(freq / f0);
+      if (h >= 1 && h <= 24 && Math.abs(1200 * Math.log2(freq / (h * f0))) < notch) continue;
+    }
+    chroma[((Math.round(freqToMidi(freq)) % 12) + 12) % 12] += m;
+  }
+  return chroma;
+}
+
+/**
+ * עוקב אחרי הסולם של המוזיקה לאורך זמן (כולל שינויי סולם באמצע שיר).
+ * שני חלונות דועכים: איטי (יציב) ומהיר (מגיב). מחליפים סולם רק כשהחלון האיטי מעדיף סולם חדש
+ * בהפרש ברור מהסולם הנוכחי, החלון המהיר מסכים, וזה נמשך כמה הערכות רצופות.
+ * כך אקורד כרומטי חולף לא מחליף סולם, ומעבר סולם אמיתי מתגלה תוך שניות ספורות.
+ * push() מחזיר {key, event}: event הוא "lock" (זיהוי ראשון), "change" (החלפה) או null.
+ */
+class KeyTracker {
+  constructor(o = {}) {
+    this.slowHalf = o.halfLifeSec ?? 6;
+    this.fastHalf = o.fastHalfLifeSec ?? 2.5;
+    this.minSec = o.minSec ?? 3;
+    this.evalSec = o.evalSec ?? 1;
+    this.votes = o.votes ?? 3;
+    this.minScore = o.minScore ?? 0.6;
+    this.margin = o.margin ?? 0.04;
+    this.minRms = o.minRms ?? 0.002;
+    this.minWeight = o.minWeight ?? 0.5;
+    this.onEval = o.onEval || null; // לניפוי שגיאות בבדיקות
+    this.voicedWeight = o.voicedWeight ?? 0.5; // משקל פריים שבו יש שירה (אחרי מחיקת ההרמוניות של הזמר)
+    this.reset();
+  }
+  reset() {
+    this.slow = new Float64Array(12); this.fast = new Float64Array(12);
+    this.w = 0; this.usable = 0; this.since = 0;
+    this.key = null; this.cand = null; this.candVotes = 0; 
+  }
+  push({ chroma, rms, dt, voiced }) {
+    const ds = Math.pow(0.5, dt / this.slowHalf), df = Math.pow(0.5, dt / this.fastHalf);
+    for (let i = 0; i < 12; i++) { this.slow[i] *= ds; this.fast[i] *= df; }
+    this.w *= ds;
+    if (rms >= this.minRms) {
+      let sum = 0; for (let i = 0; i < 12; i++) sum += chroma[i];
+      if (sum > 0) {
+        const wt = (voiced ? this.voicedWeight : 1) * dt;
+        for (let i = 0; i < 12; i++) { this.slow[i] += (chroma[i] / sum) * wt; this.fast[i] += (chroma[i] / sum) * wt; }
+        this.w += wt; this.usable += wt;
+      }
+    }
+    this.since += dt;
+    let event = null;
+    if (this.since >= this.evalSec) { this.since = 0; event = this._evaluate(); }
+    return { key: this.key, event };
+  }
+  _vote(m) {
+    if (this.cand && this.cand.mask === m.mask) this.candVotes++; else { this.cand = m; this.candVotes = 1; }
+  }
+  _evaluate() {
+    if (this.usable < this.minSec || this.w < this.minWeight) return null;
+    const slow = Array.from(this.slow), est = estimateKey(slow);
+    if (est.score < this.minScore) { this.cand = null; this.candVotes = 0; return null; }
+    est.mask = keyMask(est.root, est.scale);
+    if (!this.key) { this.key = est; return "lock"; }
+    const cur = this.key;
+    if (this.onEval) this.onEval({ best: est, curScore: scoreKey(slow, cur.root, cur.scale), fast: Array.from(this.fast), cur });
+    // הסולם החדש חייב להיות הטוב ביותר בשני החלונות (תערובת מעבר לא תיתן הסכמה), ולנצח את הנוכחי בהפרש ברור
+    let ok = est.mask !== cur.mask && est.score - scoreKey(slow, cur.root, cur.scale) >= this.margin;
+    if (ok) {
+      const fast = Array.from(this.fast), fe = estimateKey(fast);
+      ok = keyMask(fe.root, fe.scale) === est.mask && fe.score >= this.minScore;
+    }
+    if (!ok) { this.cand = null; this.candVotes = 0; return null; }
+    this._vote(est);
+    if (this.candVotes >= this.votes) { this.key = est; this.cand = null; this.candVotes = 0; return "change"; }
+    return null;
+  }
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { micErrorText, detectPitch, freqToMidi, analyze, judge, estimateKey, median, SCALES, NOTE_NAMES_HE };
+  module.exports = { micErrorText, detectPitch, freqToMidi, analyze, judge, estimateKey, scoreKey, keyMask, chromaFromMagnitudes, KeyTracker, median, SCALES, NOTE_NAMES_HE };
 }
