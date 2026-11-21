@@ -1,4 +1,4 @@
-const CACHE = "pitch-v3";
+const CACHE = "pitch-v4";
 const FILES = ["./", "index.html", "style.css", "pitch.js", "app.js", "song.html", "song.js", "external.html", "external.js", "songs.js", "manifest.webmanifest", "icons/icon.svg"];
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))));
 self.addEventListener("activate", (e) => e.waitUntil(

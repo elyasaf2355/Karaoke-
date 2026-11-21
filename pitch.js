@@ -142,6 +142,18 @@ function estimateKey(chroma) {
   return best;
 }
 
+/** הסבר בעברית לשגיאת מיקרופון. */
+function micErrorText(e) {
+  const name = (e && e.name) || "";
+  if (!window.isSecureContext || !navigator.mediaDevices)
+    return "הדף לא נפתח בכתובת מאובטחת (https). פתחו אותו מהכתובת של GitHub Pages בדפדפן רגיל, ולא מתוך אפליקציה או מקובץ.";
+  if (name === "NotAllowedError" || name === "SecurityError")
+    return "הרשאת המיקרופון נחסמה. בדפדפן: סמל המנעול ליד הכתובת, אחר כך הרשאות, מיקרופון, אפשר. בכרום באנדרואיד: הגדרות, הגדרות אתר, מיקרופון. באייפון: הגדרות, Safari, מיקרופון. אחרי זה רעננו את הדף. (" + name + ")";
+  if (name === "NotFoundError") return "לא נמצא מיקרופון במכשיר. (" + name + ")";
+  if (name === "NotReadableError") return "המיקרופון תפוס על ידי אפליקציה אחרת. סגרו אותה ונסו שוב. (" + name + ")";
+  return "לא הצלחנו לפתוח את המיקרופון. (" + (name || String(e)) + ")";
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { detectPitch, freqToMidi, analyze, judge, estimateKey, median, SCALES, NOTE_NAMES_HE };
+  module.exports = { micErrorText, detectPitch, freqToMidi, analyze, judge, estimateKey, median, SCALES, NOTE_NAMES_HE };
 }

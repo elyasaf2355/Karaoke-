@@ -76,7 +76,7 @@
     try {
       // הד/ניקוי רעשים כבויים כדי שהקול לא יעוות; את הרקע מסננים בעצמנו לפי העוצמה.
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-    } catch (e) { setUI("idle", "—", "אין גישה למיקרופון", "אשרו שימוש במיקרופון (נדרש HTTPS)", null); return; }
+    } catch (e) { setUI("idle", "—", "אין גישה למיקרופון", micErrorText(e), null); return; }
     ctx = new (window.AudioContext || window.webkitAudioContext)(); await ctx.resume();
     const src = ctx.createMediaStreamSource(stream);
     an = ctx.createAnalyser(); an.fftSize = 4096; buf = new Float32Array(4096); src.connect(an);

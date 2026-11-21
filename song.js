@@ -125,7 +125,7 @@
         audio: { echoCancellation: !$("phones").checked, noiseSuppression: false, autoGainControl: false },
       });
     } catch (e) {
-      setMsg("idle", "אין גישה למיקרופון", "אשרו שימוש במיקרופון בהגדרות הדפדפן (נדרש HTTPS)"); return;
+      setMsg("idle", "אין גישה למיקרופון", micErrorText(e)); return;
     }
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     await ctx.resume();

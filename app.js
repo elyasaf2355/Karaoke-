@@ -65,7 +65,7 @@
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
     } catch (e) {
-      setUI("idle", "—", "אין גישה למיקרופון", "אשרו שימוש במיקרופון בהגדרות הדפדפן (נדרש HTTPS)", null);
+      setUI("idle", "—", "אין גישה למיקרופון", micErrorText(e), null);
       return;
     }
     ctx = new (window.AudioContext || window.webkitAudioContext)();

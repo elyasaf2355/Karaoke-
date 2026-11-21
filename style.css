@@ -17,7 +17,7 @@ select{font:inherit;font-size:1.05rem;padding:10px;border-radius:10px;border:1px
 .tick{position:absolute;top:26px;font-size:.75rem;color:var(--muted)}
 .tick.l{left:0}.tick.r{right:0}
 .message{font-size:1.7rem;font-weight:600;min-height:2.2rem}
-.detail{margin-top:6px;color:var(--muted);min-height:1.4rem}
+.detail{margin-top:6px;line-height:1.5;color:var(--muted);min-height:1.4rem}
 button{font:inherit;font-size:1.25rem;font-weight:600;padding:16px;border:0;border-radius:14px;cursor:pointer;color:#fff}
 button.start{background:#6c4cff}
 button.stop{background:#c0392b}
