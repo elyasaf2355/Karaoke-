@@ -1,3 +1,5 @@
+import { micHelp } from "../core/mic-help.js";
+
 /** Microphone access and the Hebrew explanations for why it can fail. */
 
 /**
@@ -22,16 +24,22 @@ export async function openMicrophone({ echoCancellation = false } = {}) {
   };
 }
 
-/** Explains a getUserMedia failure in plain Hebrew, with the browser's error name for diagnosis. */
-export function describeMicError(error) {
-  const name = error?.name ?? "";
-  if (!window.isSecureContext || !navigator.mediaDevices) {
-    return "הדף לא נפתח בכתובת מאובטחת (https). פתחו אותו מהכתובת של GitHub Pages בדפדפן רגיל, ולא מתוך אפליקציה או מקובץ.";
+/** The browser's saved microphone decision for this site, or null where it can't be read (older Safari). */
+async function readPermission() {
+  try {
+    return (await navigator.permissions.query({ name: "microphone" })).state;
+  } catch {
+    return null;
   }
-  if (name === "NotAllowedError" || name === "SecurityError") {
-    return `ההרשאה למיקרופון נחסמה. בכרום: המנעול ליד הכתובת, הרשאות, מיקרופון, אפשר. באייפון: הגדרות, Safari, מיקרופון. אחר כך רעננו את הדף. (${name})`;
-  }
-  if (name === "NotFoundError") return `לא נמצא מיקרופון במכשיר. (${name})`;
-  if (name === "NotReadableError") return `המיקרופון תפוס על ידי אפליקציה אחרת. סגרו אותה ונסו שוב. (${name})`;
-  return `לא הצלחנו לפתוח את המיקרופון. (${name || String(error)})`;
+}
+
+/** Explains a getUserMedia failure in plain Hebrew, with steps for this browser and the error name for diagnosis. */
+export async function describeMicError(error) {
+  return micHelp({
+    errorName: error?.name ?? "",
+    secure: window.isSecureContext,
+    hasMediaDevices: Boolean(navigator.mediaDevices),
+    permission: await readPermission(),
+    userAgent: navigator.userAgent,
+  });
 }

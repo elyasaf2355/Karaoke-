@@ -22,7 +22,7 @@ export class ListeningSession {
     try {
       this.mic = await openMicrophone(this.hooks.micOptions?.());
     } catch (error) {
-      this.hooks.onError(describeMicError(error));
+      this.hooks.onError(await describeMicError(error));
       return;
     }
     this.tap = new MicTap(this.mic.context, this.mic.source);
