@@ -1,7 +1,12 @@
 // בדיקות לוגיקת הסולם והשיפוט: analyze / judge / keyMask / chroma, כולל מקרי גבול.
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { analyze, judge, keyMask, chromaFromMagnitudes, SCALES, median, KeyTracker } = require("../pitch.js");
+import test from "node:test";
+import assert from "node:assert/strict";
+import { nearestScaleNote as analyze, compareToTarget, keyMask } from "../src/core/music-theory.js";
+import { chromaFromMagnitudes } from "../src/core/chroma.js";
+import { median } from "../src/core/signal.js";
+import { KeyTracker } from "../src/core/key-tracker.js";
+
+const judge = (voice, target, strictOctave, toleranceCents) => compareToTarget(voice, target, { strictOctave, toleranceCents });
 
 test("analyze: צליל בסולם נותן יעד זהה וסטייה בסנטים עם הסימן הנכון", () => {
   const a = analyze(69.3, 0, "major"); // לה +30 סנט בדו מז'ור
@@ -95,11 +100,11 @@ test("chromaFromMagnitudes: פסגה יחידה ב-440Hz נכנסת בדיוק �
   mags[k - 1] = 0.3; mags[k] = 1; mags[k + 1] = 0.3;
   const c = chromaFromMagnitudes(mags, sr, N);
   assert.ok(c[9] > 0.9 && c.reduce((a, b) => a + b, 0) - c[9] < 1e-9, `chroma ${Array.from(c)}`);
-  const c2 = chromaFromMagnitudes(mags, sr, N, { f0: 440 });
+  const c2 = chromaFromMagnitudes(mags, sr, N, { voiceF0: 440 });
   assert.equal(c2.reduce((a, b) => a + b, 0), 0);
-  const c3 = chromaFromMagnitudes(mags, sr, N, { f0: 220 }); // 440 = ההרמוניה השנייה של 220
+  const c3 = chromaFromMagnitudes(mags, sr, N, { voiceF0: 220 }); // 440 = ההרמוניה השנייה של 220
   assert.equal(c3.reduce((a, b) => a + b, 0), 0);
-  const c4 = chromaFromMagnitudes(mags, sr, N, { f0: 300 }); // לא הרמוניה: נשאר
+  const c4 = chromaFromMagnitudes(mags, sr, N, { voiceF0: 300 }); // לא הרמוניה: נשאר
   assert.ok(c4[9] > 0.9);
 });
 
@@ -113,7 +118,7 @@ test("KeyTracker: קלט לא תקין (chroma אפס, dt גדול מאוד, rms
 });
 
 test("KeyTracker.reset מנקה מצב: אחרי reset אין סולם ואין אירוע", () => {
-  const t = new KeyTracker({ minSec: 0.5, evalSec: 0.5 });
+  const t = new KeyTracker({ minSec: 0.5, evalEverySec: 0.5 });
   const c = new Float64Array(12); [0, 2, 4, 5, 7, 9, 11].forEach((p) => (c[p] = 1)); c[0] = 2; c[7] = 1.5;
   let locked = false; for (let i = 0; i < 40; i++) if (t.push({ chroma: c, rms: 0.1, dt: 0.1, voiced: false }).event === "lock") locked = true;
   assert.ok(locked); t.reset(); assert.equal(t.key, null);

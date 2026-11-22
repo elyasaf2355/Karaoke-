@@ -1,8 +1,9 @@
 // בדיקות זיהוי גובה צליל (YIN) ומקרי קצה: אותות מסונתזים, בלי הנחות נוחות.
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { detectPitch, freqToMidi } = require("../pitch.js");
-const H = require("./helpers.js");
+import test from "node:test";
+import assert from "node:assert/strict";
+import { detectPitch } from "../src/core/pitch-detector.js";
+import { freqToMidi } from "../src/core/music-theory.js";
+import * as H from "./helpers.js";
 
 const cents = (f, ref) => 1200 * Math.log2(f / ref);
 function sig(sr, f, { n = 4096, amp = 0.3, harm = [1], vib = 0, vibHz = 5.5, phase0 = 0 } = {}) {

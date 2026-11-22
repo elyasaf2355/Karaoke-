@@ -1,9 +1,10 @@
 // בדיקות זיהוי ומעקב סולם על שמע מסונתז: אקורדים עם הרמוניות, בס, תופים, שירה.
 // אין כאן קיצורי דרך: כל בדיקה מריצה את הצינור המלא (FFT -> chroma -> tracker), ויש בדיקות ביקורת שמוכיחות שהבדיקה מסוגלת להיכשל.
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { keyMask, estimateKey, SCALES, analyze } = require("../pitch.js");
-const H = require("./helpers.js");
+import test from "node:test";
+import assert from "node:assert/strict";
+import { keyMask, nearestScaleNote } from "../src/core/music-theory.js";
+import { estimateKey } from "../src/core/key-estimation.js";
+import * as H from "./helpers.js";
 
 const SR = 22050;
 const ms = (root, scale) => keyMask(root, scale);
@@ -273,7 +274,7 @@ function judgeInScale(frames, from, to) {
   for (const f of frames) {
     if (f.t < from || f.t > to || f.midi === null || !f.key) continue;
     total++;
-    if (!analyze(f.midi, f.key.root, f.key.scale).inScale) out++;
+    if (!nearestScaleNote(f.midi, f.key.root, f.key.scale).inScale) out++;
   }
   return { total, out, rate: total ? out / total : 0 };
 }

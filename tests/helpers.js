@@ -1,6 +1,6 @@
 // כלי סינתזה וניתוח לבדיקות: מייצרים שמע ריאליסטי ומריצים עליו את אותו קוד של האפליקציה.
-const { SCALES } = require("../pitch.js");
-const { ExternalSession } = require("../session.js");
+import { SCALES } from "../src/core/music-theory.js";
+import { ExternalSession } from "../src/core/external-session.js";
 
 function rng(seed) { // mulberry32: דטרמיניסטי
   let a = seed >>> 0;
@@ -163,4 +163,4 @@ const maskOf = (k) => (k ? k.mask : null);
 const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const maskStr = (m) => (m == null ? "none" : names.filter((_, i) => m & (1 << i)).join(" "));
 
-module.exports = { mixVoice, names, rng, Mix, triad, events, PROG, addBacking, addVoice, melodyInKey, run, maskOf, maskStr, magnitudes, fftSizeFor, mtof };
+export { mixVoice, names, rng, Mix, triad, events, PROG, addBacking, addVoice, melodyInKey, run, maskOf, maskStr, magnitudes, fftSizeFor, mtof };
