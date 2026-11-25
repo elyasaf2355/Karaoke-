@@ -2,6 +2,7 @@ import { compareToTarget } from "./music-theory.js";
 import { noteAt } from "./song-timeline.js";
 import { SessionStats } from "./session-stats.js";
 import { median } from "./signal.js";
+import { ToleranceLatch } from "./hysteresis.js";
 
 /**
  * How strictly the singer's pitch is matched to the melody:
@@ -34,6 +35,8 @@ export class SongJudge {
     this.stats = new SessionStats();
     this.shift = 0;
     this.recentDiffs = [];
+    this.toleranceLatch = new ToleranceLatch();
+    this.currentNote = null;
   }
 
   /** Learns the singer's offset from the melody (semitones) while in "free" mode. */
@@ -55,6 +58,7 @@ export class SongJudge {
   update(songTimeSec, midi) {
     const note = noteAt(this.notes, songTimeSec);
     if (!note) return { note: null, verdict: "rest", cents: 0, octave: 0, scored: false, shift: this.shift };
+    if (note !== this.currentNote) { this.currentNote = note; this.toleranceLatch.reset(); } // each note starts fresh
     const pastGrace = songTimeSec - note.start >= this.graceSec;
 
     if (midi === null) {
@@ -64,10 +68,9 @@ export class SongJudge {
     if (this.octaveMode === "free" && pastGrace) this.#learnShift(midi, note.midi);
 
     const target = note.midi + (this.octaveMode === "free" ? this.shift : 0);
-    const { ok, octave, cents } = compareToTarget(midi, target, {
-      strictOctave: this.octaveMode === "strict",
-      toleranceCents: this.toleranceCents,
-    });
+    const { octave, cents } = compareToTarget(midi, target, { strictOctave: false, toleranceCents: this.toleranceCents });
+    const withinTolerance = this.toleranceLatch.update(Math.abs(cents), this.toleranceCents);
+    const ok = withinTolerance && (this.octaveMode !== "strict" || octave === 0);
     const verdict = ok ? "inTune" : this.octaveMode === "strict" && octave !== 0 ? "octave" : cents > 0 ? "sharp" : "flat";
     const scored = pastGrace && this.#shiftKnown;
     if (scored) this.stats.record(verdict, cents);

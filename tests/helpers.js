@@ -1,6 +1,8 @@
 // כלי סינתזה וניתוח לבדיקות: מייצרים שמע ריאליסטי ומריצים עליו את אותו קוד של האפליקציה.
 import { SCALES } from "../src/core/music-theory.js";
 import { ExternalSession } from "../src/core/external-session.js";
+import { detectPitch } from "../src/core/pitch-detector.js";
+import { freqToMidi } from "../src/core/music-theory.js";
 
 function rng(seed) { // mulberry32: דטרמיניסטי
   let a = seed >>> 0;
@@ -15,12 +17,17 @@ class Mix {
     const harm = o.harm || [1, 0.6, 0.4, 0.3, 0.2, 0.15];
     const vib = o.vibCents || 0, vibHz = o.vibHz || 5.5, cents = o.cents || 0;
     const att = o.attack ?? 0.02, rel = o.release ?? 0.08, decayTau = o.decayTau || 0;
+    const jitterCents = o.jitterCents || 0, rand = o.rand || null;
+    const jitterAlpha = 1 - Math.exp(-1 / (this.sr * 0.03)); // ~30 ms low-pass: the fast, irregular part of a human voice's pitch
+    const jitterGain = jitterCents * Math.sqrt((2 - jitterAlpha) / jitterAlpha) / 0.58; // 0.58 = std of the summed-uniforms noise below
+    let jitter = 0;
     const f0 = mtof(midi) * Math.pow(2, cents / 1200);
     const n0 = Math.max(0, Math.round(t0 * this.sr)), n1 = Math.min(this.buf.length, Math.round((t0 + dur) * this.sr));
     let phase = 0;
     for (let n = n0; n < n1; n++) {
       const t = (n - n0) / this.sr;
-      const f = vib ? f0 * Math.pow(2, (vib * Math.sin(2 * Math.PI * vibHz * t)) / 1200) : f0;
+      if (jitterCents) jitter += ((rand() + rand() + rand() - 1.5) * jitterGain - jitter) * jitterAlpha;
+      const f = vib || jitterCents ? f0 * Math.pow(2, ((vib ? vib * Math.sin(2 * Math.PI * vibHz * t) : 0) + jitter) / 1200) : f0;
       phase += (2 * Math.PI * f) / this.sr;
       let env = Math.min(1, t / att, (dur - t) / rel);
       if (env <= 0) continue;
@@ -157,10 +164,52 @@ function mixVoice(back, voiceMelodies, snrDb, { vibCents = 35, voiceAmp = 0.25, 
   return notes;
 }
 
+/**
+ * Pitch readings of a (possibly wobbly) voice, produced exactly like the app does: a sliding window of audio
+ * goes through detectPitch at a realistic frame rate. Returns [{t, midi|null}].
+ * @param {{sr?:number, frameSec?:number}} [o]
+ */
+function voiceReadings(pcm, sr, { frameSec = 1 / 60 } = {}) {
+  const W = 4096, out = [], hopN = Math.max(1, Math.round(frameSec * sr));
+  for (let end = W; end <= pcm.length; end += hopN) {
+    const found = detectPitch(pcm.subarray(end - W, end), sr, { threshold: 0.12 });
+    out.push({ t: end / sr, midi: found && found.clarity > 0.8 ? freqToMidi(found.freq) : null });
+  }
+  return out;
+}
+
+/**
+ * Pitch readings of a human-like voice, without audio: a target pitch plus vibrato plus short-lived jitter.
+ * pitchAt(t) gives the intended MIDI pitch (use a step function to model note changes).
+ * Returns [{t, midi, truth}].
+ */
+function wobblyReadings(pitchAt, { sec, fps = 60, vibCents = 40, vibHz = 5.5, jitterCents = 10, seed = 1 }) {
+  const rand = rng(seed), out = [];
+  let jitter = 0;
+  const gauss = () => (rand() + rand() + rand() - 1.5) / 0.5; // roughly unit-variance
+  for (let t = 0; t < sec; t += 1 / fps) {
+    jitter = 0.7 * jitter + 0.3 * gauss() * jitterCents * 1.6; // AR(1): irregular, ~50 ms memory
+    const wobble = vibCents * Math.sin(2 * Math.PI * vibHz * t) + jitter;
+    out.push({ t, midi: pitchAt(t) + wobble / 100, truth: pitchAt(t) });
+  }
+  return out;
+}
+
+/** מדדי יציבות של סדרת ערכים: סטיית תקן, הקפיצה הגדולה ביותר בין פריימים, וכמה פעמים הערך התהפך. */
+function stability(values) {
+  const v = values.filter((x) => x !== null && x !== undefined);
+  const mean = v.reduce((a, b) => a + b, 0) / v.length;
+  const std = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / v.length);
+  let maxJump = 0, flips = 0, last = null;
+  for (let i = 1; i < v.length; i++) maxJump = Math.max(maxJump, Math.abs(v[i] - v[i - 1]));
+  for (const x of values) { if (x !== null && last !== null && x !== last) flips++; if (x !== null) last = x; }
+  return { n: v.length, mean, std, maxJump, flips };
+}
+
 /** האירועים (lock/change) מתוך ציר הזמן. */
 function events(frames) { return frames.filter((f) => f.event).map((f) => ({ t: f.t, event: f.event, mask: f.key && f.key.mask })); }
 const maskOf = (k) => (k ? k.mask : null);
 const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const maskStr = (m) => (m == null ? "none" : names.filter((_, i) => m & (1 << i)).join(" "));
 
-export { mixVoice, names, rng, Mix, triad, events, PROG, addBacking, addVoice, melodyInKey, run, maskOf, maskStr, magnitudes, fftSizeFor, mtof };
+export { wobblyReadings, voiceReadings, stability, mixVoice, names, rng, Mix, triad, events, PROG, addBacking, addVoice, melodyInKey, run, maskOf, maskStr, magnitudes, fftSizeFor, mtof };

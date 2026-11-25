@@ -108,8 +108,8 @@ for (const [r1, s1, r2, s2, label] of MODS) {
     assert.equal(ev[1].mask, ms(r2, s2), "עבר לסולם החדש");
     const latency = ev[1].t - 30;
     assert.ok(latency > 0, `change before the modulation happened (${latency})`);
-    // תקציב: מחזור פרוגרסיה (8s) + 3 הערכות רצופות (3s) + 5s מרווח. הערכים שנמדדו: 7 עד 15 שניות.
-    assert.ok(latency <= 16, `modulation detected too late: ${latency.toFixed(1)}s`);
+    // נמדד: 5.5 עד 13.6 שניות (ממוצע כ-9.5). התקציב הוא מחזור פרוגרסיה (8s) ועוד מרווח.
+    assert.ok(latency <= 15, `modulation detected too late: ${latency.toFixed(1)}s`);
     assert.equal(H.maskOf(last(fr).key), ms(r2, s2));
   });
 }
@@ -149,18 +149,29 @@ const ANOMALIES = [
   ["E מז'ור במקום Am (סול#)", 5, [52, 56, 59]],
   ["Ab במקום F (השאלה מדו מינור)", 6, [56, 60, 63]],
 ];
-// מגבלה ידועה: Bb מכיל את אותם צלילים שמאפיינים את פה מז'ור, ולכן העוקב עובר לשם ל-3-4 שניות אחרי כל פעם ואז חוזר.
-// מסומן todo: הבדיקה ממשיכה לרוץ ותופיע בדוח, אבל לא מפילה את הסוויטה. להסרת ה-todo כשזה ייפתר.
-const KNOWN_LIMITS = new Set(["Bb במקום F (השאלה מדו מינור/פריגי)"]);
 for (const [label, bar, chord] of ANOMALIES) {
-  test(`תיבה זרה אחת בלולאה דיאטונית: ${label}. אין החלפת סולם`, KNOWN_LIMITS.has(label) ? { todo: "מגבלה ידועה: עוברים לפה מז'ור ל-3-4 שניות" } : {}, () => {
+  test(`תיבה זרה אחת בלולאה דיאטונית: ${label}. אין החלפת סולם`, () => {
     const cyc = BASE.slice(); cyc[bar] = chord;
     const mix = new H.Mix(SR, 96);
     H.addBacking(mix, { t1: 96, chords: cyc, drums: 0.05, rand: H.rng(4) });
-    const fr = H.run(mix.buf, SR, { hop: 0.2 });
+    const fr = H.run(mix.buf, SR, { hop: 0.1 }); // 10 chroma frames per second, like the app
     const ev = H.events(fr);
     assert.deepEqual(ev.map((e) => e.event), ["lock"], `events: ${JSON.stringify(ev)}`);
     assert.equal(H.maskOf(last(fr).key), ms(0, "major"));
+  });
+}
+
+// הכוונון הראשון שלי עבד רק בקצב דגימה אחד (בגלל תלות במועד הבדיקה). זו בדיקה שמוודאת שאין תלות כזו:
+// שני המקרים הקשים ביותר, בארבעה קצבי דגימה שונים.
+for (const hop of [0.05, 0.15, 0.2]) {
+  test(`תיבה זרה: התוצאה לא תלויה בקצב הדגימה (כל ${hop} שניות)`, () => {
+    for (const [, bar, chord] of ANOMALIES.filter(([label]) => /Bb|Ab/.test(label))) {
+      const cyc = BASE.slice(); cyc[bar] = chord;
+      const mix = new H.Mix(SR, 96);
+      H.addBacking(mix, { t1: 96, chords: cyc, drums: 0.05, rand: H.rng(5) });
+      const ev = H.events(H.run(mix.buf, SR, { hop }));
+      assert.deepEqual(ev.map((e) => e.event), ["lock"], `hop ${hop}: ${JSON.stringify(ev)}`);
+    }
   });
 }
 
@@ -301,7 +312,7 @@ test("מקצה לקצה: שינוי סולם באמצע, הזמר שר נכון,
 
 test("ביקורת: עם סולם קפוא אחרי שינוי הסולם, רוב הצלילים הנכונים מסומנים בטעות (מוכיח שהתיקון חשוב)", () => {
   const { mix, sec } = modulatingSong();
-  const frozen = H.run(mix.buf, SR, { hop: 0.1, sessionOpts: { tracker: { votes: 1e9 } } });
+  const frozen = H.run(mix.buf, SR, { hop: 0.1, sessionOpts: { tracker: { evidenceNeeded: 1e9 } } });
   const after = judgeInScale(frozen, 52, sec);
   assert.ok(after.rate > 0.3, `frozen key only wrong ${(after.rate * 100).toFixed(1)}%`);
 });

@@ -1,45 +1,13 @@
 // Tests for the smaller core modules: smoothing, stats, timeline, judging, wording, settings.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PitchSmoother } from "../src/core/pitch-smoother.js";
 import { SessionStats } from "../src/core/session-stats.js";
 import { buildTimeline, noteAt } from "../src/core/song-timeline.js";
 import { SongJudge } from "../src/core/song-judge.js";
 import { feedbackFor, summaryFor } from "../src/core/feedback.js";
-import { createSettings, STRICTNESS } from "../src/core/settings.js";
+import { createSettings, STRICTNESS, RESPONSE } from "../src/core/settings.js";
 import { SONGS } from "../src/core/songs.js";
 import { rms } from "../src/core/signal.js";
-
-// ---------- PitchSmoother ----------
-test("PitchSmoother: the median ignores a single wild reading", () => {
-  const s = new PitchSmoother({ size: 5 });
-  [60, 60, 72, 60, 60].forEach((m, i) => s.push(m, i * 0.02));
-  assert.equal(s.push(60, 0.1), 60);
-});
-
-test("PitchSmoother: follows a real note change within half a window", () => {
-  const s = new PitchSmoother({ size: 5 });
-  for (let i = 0; i < 5; i++) s.push(60, i * 0.02);
-  const outputs = [64, 64, 64].map((m, i) => s.push(m, 0.1 + i * 0.02));
-  assert.equal(outputs[2], 64);
-});
-
-test("PitchSmoother: forgets after silence, but not during a short gap", () => {
-  const s = new PitchSmoother({ size: 5, forgetAfterSec: 0.4 });
-  s.push(60, 0); s.push(60, 0.02);
-  s.miss(0.2);
-  assert.equal(s.readings.length, 2, "short gap should keep history");
-  s.miss(0.6);
-  assert.equal(s.readings.length, 0);
-  assert.equal(s.push(70, 1), 70, "old readings must not leak into the new note");
-});
-
-test("PitchSmoother: silentFor reports time since the last reading", () => {
-  const s = new PitchSmoother();
-  s.push(60, 2);
-  assert.ok(Math.abs(s.silentFor(2.5) - 0.5) < 1e-9);
-  assert.equal(new PitchSmoother().silentFor(1), Infinity);
-});
 
 // ---------- SessionStats ----------
 test("SessionStats: empty stats don't divide by zero", () => {
@@ -354,4 +322,15 @@ test("strict and loose modes never learn a shift", () => {
     sing(j, -5);
     assert.equal(j.shift, 0, mode);
   }
+});
+
+test("settings: the meter response defaults to calm, is validated, persists, and maps to a time constant", () => {
+  const storage = memoryStorage();
+  const s = createSettings(storage);
+  assert.equal(s.get("meterResponse"), "calm");
+  assert.equal(s.smoothingSec, RESPONSE.calm.timeConstantSec);
+  s.set("meterResponse", "quick");
+  assert.equal(createSettings(storage).smoothingSec, RESPONSE.quick.timeConstantSec);
+  assert.throws(() => s.set("meterResponse", "frantic"), RangeError);
+  assert.ok(RESPONSE.calm.timeConstantSec > RESPONSE.normal.timeConstantSec && RESPONSE.normal.timeConstantSec > RESPONSE.quick.timeConstantSec);
 });

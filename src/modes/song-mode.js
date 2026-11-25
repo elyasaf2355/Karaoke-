@@ -3,7 +3,7 @@ import { ICONS } from "../ui/icons.js";
 import { Readout } from "../ui/readout.js";
 import { PianoRoll } from "../ui/piano-roll.js";
 import { ListeningSession } from "../ui/listening-session.js";
-import { strictnessPicker, checkbox, settingsPanel } from "../ui/controls.js";
+import { strictnessPicker, responsePicker, checkbox, settingsPanel } from "../ui/controls.js";
 import { renderSummary } from "../ui/summary-card.js";
 import { scheduleBacking } from "../audio/backing-synth.js";
 import { detectPitch } from "../core/pitch-detector.js";
@@ -15,8 +15,8 @@ import { feedbackFor } from "../core/feedback.js";
 import { freqToMidi, noteNameOf } from "../core/music-theory.js";
 
 const MIN_CLARITY = 0.8;
-/** Fixed processing delay between the voice and what we analyse (analysis window + smoothing). */
-const PROCESSING_LAG_SEC = 0.08;
+/** Fixed processing delay between the voice and what we analyse (analysis window + the smoother's median window). */
+const PROCESSING_LAG_SEC = 0.15;
 const TRACE_SECONDS = 6;
 const semitones = (n) => (n === 1 ? "חצי טון" : `${n} חצאי טון`);
 const VERDICT_COLOR = { inTune: "--led-ok", sharp: "--led-sharp", flat: "--led-flat", octave: "--led-octave" };
@@ -71,7 +71,7 @@ export function createSongMode({ settings }) {
         timeline = buildTimeline(song);
         roll = new PianoRoll(rollCanvas, timeline);
         judge = new SongJudge(timeline.notes, { octaveMode: octaveSelect.value, toleranceCents: settings.toleranceCents });
-        smoother = new PitchSmoother(); trace = [];
+        smoother = new PitchSmoother({ timeConstantSec: settings.smoothingSec }); trace = [];
         backing = scheduleBacking(tap.context, song, timeline, { guideMelody: guideBox.input.checked });
         summaryEl.replaceChildren();
       },
@@ -103,9 +103,10 @@ export function createSongMode({ settings }) {
       guideBox = checkbox("guide", "להשמיע את המנגינה כהדרכה (עדיף באוזניות)", settings.get("guideMelody"), (on) => settings.set("guideMelody", on));
       phonesBox = checkbox("phones", "אני עם אוזניות. בלי אוזניות יופעל ביטול הד", settings.get("headphones"), (on) => settings.set("headphones", on));
       const strictness = strictnessPicker(settings);
+      const response = responsePicker(settings);
       summaryEl = h("div", { class: "summary" });
       toggleButton = h("button", { class: "primary", type: "button", onclick: () => session.toggle() }, "התחל שיר");
-      cleanups = [strictness.destroy, settings.subscribe((key) => key === "strictness" && readout.setTolerance(settings.toleranceCents))];
+      cleanups = [strictness.destroy, response.destroy, settings.subscribe((key) => key === "strictness" && readout.setTolerance(settings.toleranceCents))];
       session = buildSession();
 
       host.append(
@@ -114,7 +115,7 @@ export function createSongMode({ settings }) {
         rollCanvas, readout.element, toggleButton, summaryEl,
         settingsPanel(
           h("label", { class: "field" }, h("span", {}, "התאמה למנגינה"), octaveSelect),
-          strictness.element, guideBox.element, phonesBox.element));
+          strictness.element, response.element, guideBox.element, phonesBox.element));
       const initialTimeline = buildTimeline(SONGS[0]);
       roll = new PianoRoll(rollCanvas, initialTimeline);
       roll.draw({ notes: initialTimeline.notes, playSec: 0, trace: [] });

@@ -6,6 +6,8 @@ import { freqToMidi } from "./music-theory.js";
 import { rms } from "./signal.js";
 
 const MIN_CLARITY = 0.85;
+/** Timestamps are floating point: a frame that is 0.1999999 s after the last one is still "0.2 s later". */
+const TIME_TOLERANCE_SEC = 1e-6;
 /** How long after hearing the singer a frame still counts as "voiced". */
 const VOICED_HANG_SEC = 0.3;
 /** YIN threshold loose enough to find a voice over loud accompaniment (tuned on mixes, see tests). */
@@ -19,7 +21,7 @@ const VOICE_YIN_THRESHOLD = 0.2;
 export class ExternalSession {
   /**
    * @param {number} sampleRate
-   * @param {{fftSize?:number, voiceGate?:number, chromaEverySec?:number, tracker?:object, voiceHandling?:"notch"|"none"}} options
+   * @param {{fftSize?:number, voiceGate?:number, chromaEverySec?:number, tracker?:object, smoothing?:object, voiceHandling?:"notch"|"none"}} options
    *   voiceHandling "none" disables removing the singer from the key analysis (used by control tests).
    */
   constructor(sampleRate, options = {}) {
@@ -29,7 +31,7 @@ export class ExternalSession {
     this.chromaEverySec = options.chromaEverySec ?? 0.1;
     this.voiceHandling = options.voiceHandling ?? "notch";
     this.tracker = new KeyTracker(options.tracker);
-    this.smoother = new PitchSmoother();
+    this.smoother = new PitchSmoother(options.smoothing);
     this.baseline = 0.01;
     this.calibrating = true;
     this.calibrationSum = 0;
@@ -54,7 +56,7 @@ export class ExternalSession {
   get key() { return this.tracker.key; }
 
   /** True when a new spectrum is needed for key analysis (lets callers skip the FFT read on other frames). */
-  chromaDue(timeSec) { return this.lastChromaAt === null || timeSec - this.lastChromaAt >= this.chromaEverySec; }
+  chromaDue(timeSec) { return this.lastChromaAt === null || timeSec - this.lastChromaAt >= this.chromaEverySec - TIME_TOLERANCE_SEC; }
 
   /**
    * @param {Float32Array} samples time-domain window
@@ -85,7 +87,7 @@ export class ExternalSession {
   #updateKey(samples, magnitudes, timeSec) {
     if (this.lastChromaAt === null) this.lastChromaAt = timeSec - this.chromaEverySec;
     const dt = timeSec - this.lastChromaAt;
-    if (dt < this.chromaEverySec) return null;
+    if (dt < this.chromaEverySec - TIME_TOLERANCE_SEC) return null;
     this.lastChromaAt = timeSec;
 
     const voiced = this.voiceHandling !== "none" && timeSec - this.lastVoiceAt < VOICED_HANG_SEC;

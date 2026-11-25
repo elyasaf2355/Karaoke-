@@ -1,20 +1,32 @@
 import { estimateKey, scoreKey } from "./key-estimation.js";
 import { keyMask } from "./music-theory.js";
 
+/** Accumulated float timestamps can fall a hair short of a round interval; don't let that skip a check. */
+const TIME_TOLERANCE_SEC = 1e-6;
+
 const DEFAULTS = {
   /** Half-life (s) of the slow, stable window and the fast, reactive one. */
-  slowHalfLifeSec: 6,
+  slowHalfLifeSec: 5,
   fastHalfLifeSec: 2.5,
   /** Seconds of usable audio required before the first key is announced. */
   minSec: 3,
   /** How often (s) the key is re-evaluated. */
-  evalEverySec: 1,
-  /** Consecutive agreeing evaluations needed to switch key. */
-  votes: 3,
+  evalEverySec: 0.1,
+  /**
+   * Evidence (correlation x seconds) needed before switching. Each evaluation adds
+   * (how much better the best key fits than the current one - margin) x elapsed time, never going below 0.
+   * Strong evidence therefore switches sooner than weak evidence, short-lived evidence never does,
+   * and the result doesn't depend on exactly when the evaluations happen to fall.
+   */
+  evidenceNeeded: 0.4,
   /** Correlation below this is "no clear key". */
   minScore: 0.6,
-  /** A new key must beat the current one by this much (correlation) in the slow window. */
-  margin: 0.04,
+  /**
+   * How much better (correlation, slow window) another key must fit before it counts as evidence at all.
+   * After a real key change the old key's fit collapses (a big gap); a borrowed chord only makes
+   * another key look slightly better.
+   */
+  margin: 0.15,
   /** Frames quieter than this (RMS) are ignored. */
   minRms: 0.002,
   minWeight: 0.5,
@@ -45,8 +57,7 @@ export class KeyTracker {
     this.usableSec = 0;
     this.sinceEval = 0;
     this.key = null;
-    this.candidate = null;
-    this.candidateVotes = 0;
+    this.evidence = 0;
   }
 
   /**
@@ -58,9 +69,10 @@ export class KeyTracker {
     if (rms >= this.o.minRms) this.#accumulate(chroma, dt, voiced);
     this.sinceEval += dt;
     let event = null;
-    if (this.sinceEval >= this.o.evalEverySec) {
+    if (this.sinceEval >= this.o.evalEverySec - TIME_TOLERANCE_SEC) {
+      const elapsed = this.sinceEval;
       this.sinceEval = 0;
-      event = this.#evaluate();
+      event = this.#evaluate(elapsed);
     }
     return { key: this.key, event };
   }
@@ -86,35 +98,30 @@ export class KeyTracker {
     this.usableSec += w;
   }
 
-  #resetCandidate() { this.candidate = null; this.candidateVotes = 0; }
-
-  #evaluate() {
+  #evaluate(elapsedSec) {
     if (this.usableSec < this.o.minSec || this.weight < this.o.minWeight) return null;
     const slow = Array.from(this.slow);
     const best = estimateKey(slow);
-    if (best.score < this.o.minScore) { this.#resetCandidate(); return null; }
+    if (best.score < this.o.minScore) { this.evidence = Math.max(0, this.evidence - this.o.margin * elapsedSec); return null; }
     best.mask = keyMask(best.root, best.scale);
 
     if (!this.key) { this.key = best; return "lock"; }
 
     const current = this.key;
-    if (this.o.onEvaluate) this.o.onEvaluate({ best, current, currentScore: scoreKey(slow, current.root, current.scale), fast: Array.from(this.fast) });
+    const currentScore = scoreKey(slow, current.root, current.scale);
+    if (this.o.onEvaluate) this.o.onEvaluate({ best, current, currentScore, fast: Array.from(this.fast) });
 
-    if (!this.#fastWindowAgrees(best, slow)) { this.#resetCandidate(); return null; }
-    if (this.candidate && this.candidate.mask === best.mask) this.candidateVotes++;
-    else { this.candidate = best; this.candidateVotes = 1; }
+    const gap = best.mask === current.mask ? 0 : best.score - currentScore;
+    this.evidence = Math.max(0, this.evidence + (gap - this.o.margin) * elapsedSec);
+    if (this.evidence < this.o.evidenceNeeded || !this.#fastWindowAgrees(best)) return null;
 
-    if (this.candidateVotes < this.o.votes) return null;
     this.key = best;
-    this.#resetCandidate();
+    this.evidence = 0;
     return "change";
   }
 
-  /** The new key must differ from the current one, win by a margin, and be the fast window's favourite too. */
-  #fastWindowAgrees(best, slow) {
-    const current = this.key;
-    if (best.mask === current.mask) return false;
-    if (best.score - scoreKey(slow, current.root, current.scale) < this.o.margin) return false;
+  /** The fast window must independently pick the same new key, so a half-blended window can't trigger a switch. */
+  #fastWindowAgrees(best) {
     const fastBest = estimateKey(Array.from(this.fast));
     return keyMask(fastBest.root, fastBest.scale) === best.mask && fastBest.score >= this.o.minScore;
   }

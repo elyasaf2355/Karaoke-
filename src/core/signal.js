@@ -6,8 +6,9 @@ export function rms(samples) {
   return Math.sqrt(sum / samples.length);
 }
 
-/** Median of a list of numbers. */
+/** Median of a list of numbers (for an even count, the mean of the two middle values, so there is no upward bias). */
 export function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }

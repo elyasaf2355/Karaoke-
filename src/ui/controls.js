@@ -1,6 +1,6 @@
 import { h } from "./dom.js";
 import { NOTE_NAMES_HE, SCALES } from "../core/music-theory.js";
-import { STRICTNESS } from "../core/settings.js";
+import { STRICTNESS, RESPONSE } from "../core/settings.js";
 
 /** Key + scale pickers, bound to the settings store. */
 export function scalePicker(settings, { allowChromatic = true, onManualChange } = {}) {
@@ -28,18 +28,30 @@ export function scalePicker(settings, { allowChromatic = true, onManualChange } 
   };
 }
 
-/** Three-way "how picky should I be" switch. */
-export function strictnessPicker(settings) {
-  const buttons = Object.entries(STRICTNESS).map(([key, { label, toleranceCents }]) =>
-    h("button", { type: "button", class: "segmented__option", dataset: { value: key }, title: `±${toleranceCents} סנט`,
-      onclick: () => settings.set("strictness", key) }, label));
-  const sync = () => buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === settings.get("strictness"))));
+/** A small segmented switch bound to one setting. options: { value: {label, hint} } */
+function optionPicker(settings, key, title, options) {
+  const buttons = Object.entries(options).map(([value, { label, hint }]) =>
+    h("button", { type: "button", class: "segmented__option", dataset: { value }, title: hint,
+      onclick: () => settings.set(key, value) }, label));
+  const sync = () => buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === settings.get(key))));
   const unsubscribe = settings.subscribe(sync);
   sync();
   return {
-    element: h("div", { class: "field" }, h("span", {}, "רמת קפדנות"), h("div", { class: "segmented", role: "group" }, buttons)),
+    element: h("div", { class: "field" }, h("span", {}, title), h("div", { class: "segmented", role: "group", "aria-label": title }, buttons)),
     destroy: unsubscribe,
   };
+}
+
+/** "How picky should I be". */
+export function strictnessPicker(settings) {
+  return optionPicker(settings, "strictness", "רמת קפדנות",
+    Object.fromEntries(Object.entries(STRICTNESS).map(([k, v]) => [k, { label: v.label, hint: `±${v.toleranceCents} סנט` }])));
+}
+
+/** "How calm should the meter be". */
+export function responsePicker(settings) {
+  return optionPicker(settings, "meterResponse", "תגובת המדד",
+    Object.fromEntries(Object.entries(RESPONSE).map(([k, v]) => [k, { label: v.label, hint: `הערכה ממוצעת על ${v.timeConstantSec} שניות` }])));
 }
 
 export function checkbox(id, label, checked, onChange) {

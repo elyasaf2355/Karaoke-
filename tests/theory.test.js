@@ -87,6 +87,8 @@ test("keyMask: מז'ור ומינור יחסי נותנים אותה מסכה, �
 });
 
 test("median: אורך זוגי, איבר בודד, ושלילי", () => {
+  assert.equal(median([1, 2, 3, 4]), 2.5, "even length: mean of the two middle values, not the upper one");
+  assert.equal(median([10, 0]), 5);
   assert.equal(median([3]), 3); assert.equal(median([1, 9, 5]), 5); assert.equal(median([-1, -5, -3]), -3);
 });
 

@@ -33,6 +33,17 @@ export function keyMask(root, scaleKey) {
 
 export const maskContains = (mask, midi) => (mask & (1 << pitchClass(midi))) !== 0;
 
+/** The note in a key mask closest to a (fractional) MIDI pitch, regardless of octave. */
+export function nearestNoteInMask(midi, mask) {
+  const center = Math.round(midi);
+  let best = null;
+  for (let candidate = center - SEARCH_RADIUS_SEMITONES; candidate <= center + SEARCH_RADIUS_SEMITONES; candidate++) {
+    if (!maskContains(mask, candidate)) continue;
+    if (best === null || Math.abs(midi - candidate) < Math.abs(midi - best)) best = candidate;
+  }
+  return best;
+}
+
 /**
  * The scale note closest to a (fractional) MIDI pitch, regardless of octave.
  * @returns {{target:number, noteName:string, cents:number, inScale:boolean}}
@@ -40,19 +51,8 @@ export const maskContains = (mask, midi) => (mask & (1 << pitchClass(midi))) !==
  */
 export function nearestScaleNote(midi, root, scaleKey) {
   const mask = keyMask(root, scaleKey);
-  const center = Math.round(midi);
-  let best = null;
-  for (let candidate = center - SEARCH_RADIUS_SEMITONES; candidate <= center + SEARCH_RADIUS_SEMITONES; candidate++) {
-    if (!maskContains(mask, candidate)) continue;
-    const distance = Math.abs(midi - candidate);
-    if (best === null || distance < best.distance) best = { candidate, distance };
-  }
-  return {
-    target: best.candidate,
-    noteName: noteNameOf(best.candidate),
-    cents: (midi - best.candidate) * CENTS_PER_SEMITONE,
-    inScale: maskContains(mask, center),
-  };
+  const target = nearestNoteInMask(midi, mask);
+  return { target, noteName: noteNameOf(target), cents: (midi - target) * CENTS_PER_SEMITONE, inScale: maskContains(mask, midi) };
 }
 
 /**
